@@ -1,0 +1,6 @@
+{
+  "type": "module",
+  "dependencies": {
+    "barejs": "~0.1.62"
+  }
+}
