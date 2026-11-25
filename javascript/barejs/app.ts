@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { BareJS, type Context } from 'barejs';
 
 const ID = /^[0-9]{8}$/;
@@ -12,12 +11,14 @@ const EMPTY_200 = { status: 200, headers: { 'content-type': 'text/plain' } };
 const fail = (code: number) => new Response('', { status: code });
 const json = (text: string) => new Response(text, JSON_INIT);
 
-function seedOf(url: string): string | null {
+const seedOf = (url: string): string | null => {
   const at = url.indexOf('?');
   if (at < 0) return null;
-  const pairs = [...new URLSearchParams(url.slice(at + 1))];
-  return pairs.length === 1 && pairs[0]![0] === 'seed' && SEED.test(pairs[0]![1]) ? pairs[0]![1] : null;
-}
+  const qs = url.slice(at + 1);
+  if (qs.length !== 13 || !qs.startsWith('seed=')) return null;
+  const val = qs.slice(5);
+  return SEED.test(val) ? val : null;
+};
 
 const BOUNDARY = /^[0-9A-Za-z'()+_,\-./:=?]{1,70}$/;
 const CRLF = Buffer.from('\r\n');
@@ -73,7 +74,7 @@ function uploadedFile(body: Buffer, boundary: string): Buffer | null {
   }
 }
 
-const app = new BareJS();
+const app = new BareJS({ banner: false });
 
 app.get('/', () => new Response('', EMPTY_200));
 
@@ -93,7 +94,8 @@ app.post('/user', () => new Response('', EMPTY_200));
 app.get('/serialization', (ctx: Context) => {
   const seed = seedOf(ctx.req.url);
   if (seed === null) return fail(400);
-  return json(`[${new Array(100).fill(`{"seed":"${seed}"}`).join(',')}]`);
+  const item = `{"seed":"${seed}"}`;
+  return json(`[${item}${`,${item}`.repeat(99)}]`);
 });
 
 app.post('/deserialization', async (ctx: Context) => {
@@ -126,7 +128,7 @@ app.post('/upload', async (ctx: Context) => {
   const file = uploadedFile(Buffer.from(await req.arrayBuffer()), boundary);
   if (file === null) return fail(400);
   const last = file.length - 1;
-  const checksum = createHash('sha256').update(file).digest('hex');
+  const checksum = new Bun.CryptoHasher('sha256').update(file).digest('hex');
   return json(
     `{"first_byte":${file.length ? file[0] : 'null'},"last_byte":${file.length ? file[last] : 'null'},"checksum":"${checksum}"}`,
   );
